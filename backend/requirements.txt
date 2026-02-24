@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+python-multipart
+llama-index
+llama-index-llms-gemini
+llama-index-embeddings-huggingface
+llama-parse
+nest_asyncio

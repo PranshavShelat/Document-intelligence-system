@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Academic Research Navigator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 min-h-screen flex flex-col items-center p-10">
+
+    <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-2xl">
+        <h1 class="text-3xl font-bold text-slate-800 mb-2">Research RAG Agent</h1>
+        <p class="text-slate-500 mb-6">Upload your papers and ask questions.</p>
+
+        <div class="mb-6 p-4 border-2 border-dashed border-slate-300 rounded-lg text-center">
+            <input type="file" id="fileInput" multiple accept=".pdf" class="hidden">
+            <label for="fileInput" class="cursor-pointer text-blue-600 hover:text-blue-800 font-medium">
+                Click to Upload PDFs
+            </label>
+            <p id="fileCount" class="text-sm text-slate-400 mt-2">No files selected</p>
+            <button onclick="uploadFiles()" id="uploadBtn" class="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition w-full disabled:bg-slate-400">
+                Process Papers
+            </button>
+            <p id="uploadStatus" class="text-sm mt-2 text-green-600 font-medium"></p>
+        </div>
+
+        <div class="space-y-4">
+            <div id="chatHistory" class="h-64 overflow-y-auto bg-slate-50 p-4 rounded-lg border border-slate-200">
+                <p class="text-center text-slate-400 text-sm">Chat history will appear here...</p>
+            </div>
+            
+            <div class="flex gap-2 items-center bg-slate-50 p-2 rounded-lg border border-slate-200">
+                <label for="topK" class="text-sm text-slate-600 font-medium whitespace-nowrap">References:</label>
+                <input type="number" id="topK" value="15" min="1" max="100" class="w-16 p-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-center">
+            </div>
+
+            <div class="flex gap-2">
+                <input type="text" id="queryInput" placeholder="Ask a question about your papers..." 
+                    class="flex-1 p-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <button onclick="sendQuery()" class="bg-slate-800 text-white px-6 py-3 rounded-lg hover:bg-slate-900 transition">
+                    Send
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "https://pranshav1-research-rag.hf.space"; 
+
+        const fileInput = document.getElementById('fileInput');
+        const fileCount = document.getElementById('fileCount');
+
+        fileInput.addEventListener('change', () => {
+            fileCount.textContent = `${fileInput.files.length} files selected`;
+        });
+
+        async function uploadFiles() {
+            const files = fileInput.files;
+            if (files.length === 0) return alert("Please select files first!");
+
+            const formData = new FormData();
+            for (let i = 0; i < files.length; i++) {
+                formData.append("files", files[i]);
+            }
+
+            const btn = document.getElementById('uploadBtn');
+            const status = document.getElementById('uploadStatus');
+            btn.disabled = true;
+            btn.textContent = "Processing... (This may take a minute)";
+            status.textContent = "";
+
+            try {
+                const res = await fetch(`${API_URL}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                status.textContent = "✅ " + data.message;
+            } catch (err) {
+                status.textContent = "❌ Error uploading files.";
+                console.error(err);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "Process Papers";
+            }
+        }
+
+        async function sendQuery() {
+            const input = document.getElementById('queryInput');
+            const topKInput = document.getElementById('topK'); // Get the new input value
+            const history = document.getElementById('chatHistory');
+            const text = input.value;
+            if (!text) return;
+
+            // Ensure top_k is a valid number
+            const topKValue = parseInt(topKInput.value) || 15;
+
+            // Add User Message
+            history.innerHTML += `<div class="mb-2 text-right"><span class="bg-blue-100 text-blue-800 py-1 px-3 rounded-lg inline-block">${text}</span></div>`;
+            input.value = "";
+            history.scrollTop = history.scrollHeight;
+
+            try {
+                const res = await fetch(`${API_URL}/query`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    // NEW: Pass the dynamic top_k value to the backend
+                    body: JSON.stringify({ query: text, top_k: topKValue })
+                });
+                
+                if (!res.ok) throw new Error("Server error");
+                
+                const data = await res.json();
+                
+                // Add AI Message
+                let sourceHTML = data.sources.map(s => `<li class="text-xs text-slate-500 mt-1">📄 ${s.file} (p. ${s.page})</li>`).join("");
+                history.innerHTML += `
+                    <div class="mb-2 text-left">
+                        <div class="bg-white border border-slate-200 py-2 px-3 rounded-lg inline-block text-slate-800 shadow-sm">
+                            ${data.response}
+                            <ul class="mt-2 border-t pt-2 border-slate-100">${sourceHTML}</ul>
+                        </div>
+                    </div>`;
+            } catch (err) {
+                history.innerHTML += `<div class="text-red-500 text-sm">Error connecting to server.</div>`;
+                console.error(err);
+            }
+            history.scrollTop = history.scrollHeight;
+        }
+    </script>
+</body>
+</html>
